@@ -1,4 +1,7 @@
-﻿/***************************************************************************
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+/***************************************************************************
 
 Copyright (c) Microsoft Corporation 2016.
 
@@ -15,6 +18,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
 using Xunit;
+
+#if !ELIDE_XUNIT_TESTS
 
 namespace OpenXmlPowerTools.Tests
 {
@@ -74,7 +79,7 @@ namespace OpenXmlPowerTools.Tests
             List<XElement> textRuns = UnicodeMapper.StringToCoalescedRunList(textString, null);
             List<XElement> mixedRuns = UnicodeMapper.StringToCoalescedRunList(mixedString, null);
 
-            Assert.Equal(1, textRuns.Count);
+            Assert.Single(textRuns);
             Assert.Equal(5, mixedRuns.Count);
 
             Assert.Equal("First", mixedRuns.Elements(W.t).Skip(0).First().Value);
@@ -139,3 +144,5 @@ namespace OpenXmlPowerTools.Tests
         }
     }
 }
+
+#endif

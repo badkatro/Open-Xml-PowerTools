@@ -1,20 +1,5 @@
-﻿/***************************************************************************
-
-Copyright (c) Microsoft Corporation 2012-2015.
-
-This code is licensed using the Microsoft Public License (Ms-PL).  The text of the license can be found here:
-
-http://www.microsoft.com/resources/sharedsource/licensingbasics/publiclicense.mspx
-
-Published at http://OpenXmlDeveloper.org
-Resource Center and Documentation: http://openxmldeveloper.org/wiki/w/wiki/powertools-for-open-xml.aspx
-
-Developer: Eric White
-Blog: http://www.ericwhite.com
-Twitter: @EricWhiteDev
-Email: eric@ericwhite.com
-
-***************************************************************************/
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
 using System.Collections.Generic;
@@ -29,6 +14,8 @@ using DocumentFormat.OpenXml.Packaging;
 using OpenXmlPowerTools;
 using Xunit;
 
+#if !ELIDE_XUNIT_TESTS
+
 namespace OxPt
 {
     public class RpTests
@@ -36,7 +23,7 @@ namespace OxPt
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // perf settings
         public static bool m_CopySourceFilesToTempDir = true;
-        public static bool m_OpenTempDirInExplorer = true;
+        public static bool m_OpenTempDirInExplorer = false;
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         [Theory]
@@ -89,25 +76,10 @@ namespace OxPt
         [InlineData("RP/RP046-Consecutive-Deleted-Ranges.docx")]
         [InlineData("RP/RP047-Inserted-and-Deleted-Paragraph-Mark.docx")]
         [InlineData("RP/RP048-Deleted-Inserted-Para-Mark.docx")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-        //[InlineData("RP/")]
-
+        [InlineData("RP/RP049-Deleted-Para-Before-Table.docx")]
+        [InlineData("RP/RP050-Deleted-Footnote.docx")]
+        [InlineData("RP/RP052-Deleted-Para-Mark.docx")]
         public void RP001(string name)
-        {
-            DoTest(name);
-        }
-
-        public void DoTest(string name)
         {
             var sourceFi = new FileInfo(Path.Combine(TestUtil.SourceDir.FullName, name));
             var baselineAcceptedFi = new FileInfo(Path.Combine(TestUtil.SourceDir.FullName, name.Replace(".docx", "-Accepted.docx")));
@@ -233,3 +205,5 @@ namespace OxPt
         }
     }
 }
+
+#endif

@@ -1,29 +1,5 @@
-﻿/***************************************************************************
-
-Copyright (c) Microsoft Corporation 2012-2015.
-
-This code is licensed using the Microsoft Public License (Ms-PL).  The text of the license can be found here:
-
-http://www.microsoft.com/resources/sharedsource/licensingbasics/publiclicense.mspx
-
-Published at http://OpenXmlDeveloper.org
-Resource Center and Documentation: http://openxmldeveloper.org/wiki/w/wiki/powertools-for-open-xml.aspx
-
-Developer: Eric White
-Blog: http://www.ericwhite.com
-Twitter: @EricWhiteDev
-Email: eric@ericwhite.com
-
-Version: 3.1.10
- * Add PtOpenXml.ListItemRun
-
-Version: 2.7.03
- * Enhancements to support RTL
-
-Version: 2.6.00
- * Enhancements to support HtmlConverter.cs
-
-***************************************************************************/
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
 using System.IO;
@@ -678,13 +654,15 @@ namespace OpenXmlPowerTools
             if (rPr == null)
                 throw new OpenXmlPowerToolsException("Internal Error, should have run properties");
             var languageType = (string)r.Attribute(PtOpenXml.LanguageType);
-            decimal? sz = null;
+            decimal? szn = null;
             if (languageType == "bidi")
-                sz = (decimal?)rPr.Elements(W.szCs).Attributes(W.val).FirstOrDefault();
+                szn = (decimal?)rPr.Elements(W.szCs).Attributes(W.val).FirstOrDefault();
             else
-                sz = (decimal?)rPr.Elements(W.sz).Attributes(W.val).FirstOrDefault();
-            if (sz == null)
-                sz = 22m;
+                szn = (decimal?)rPr.Elements(W.sz).Attributes(W.val).FirstOrDefault();
+            if (szn == null)
+                szn = 22m;
+
+            var sz = szn.GetValueOrDefault();
 
             // unknown font families will throw ArgumentException, in which case just return 0
             if (!KnownFamilies.Contains(fontName))
@@ -743,66 +721,9 @@ namespace OpenXmlPowerTools
                 runText = sb.ToString();
             }
 
-            try
-            {
-                using (Font f = new Font(ff, (float)sz / 2f, fs))
-                {
-                    System.Windows.Forms.TextFormatFlags tff = System.Windows.Forms.TextFormatFlags.NoPadding;
-                    Size proposedSize = new Size(int.MaxValue, int.MaxValue);
-                    var sf = System.Windows.Forms.TextRenderer.MeasureText(runText, f, proposedSize, tff); // sf returns size in pixels
-                    var dpi = 96m;
-                    var twip = (int)(((sf.Width / dpi) * 1440m) / multiplier + tabLength * 1440m);
-                    return twip;
-                }
-            }
-            catch (ArgumentException)
-            {
-                try
-                {
-                    var fs2 = FontStyle.Regular;
-                    using (Font f = new Font(ff, (float)sz / 2f, fs2))
-                    {
-                        System.Windows.Forms.TextFormatFlags tff = System.Windows.Forms.TextFormatFlags.NoPadding;
-                        Size proposedSize = new Size(int.MaxValue, int.MaxValue);
-                        var sf = System.Windows.Forms.TextRenderer.MeasureText(runText, f, proposedSize, tff); // sf returns size in pixels
-                        var dpi = 96m;
-                        var twip = (int)(((sf.Width / dpi) * 1440m) / multiplier + tabLength * 1440m);
-                        return twip;
-                    }
-                }
-                catch (ArgumentException)
-                {
-                    var fs2 = FontStyle.Bold;
-                    try
-                    {
-                        using (Font f = new Font(ff, (float)sz / 2f, fs2))
-                        {
-                            System.Windows.Forms.TextFormatFlags tff = System.Windows.Forms.TextFormatFlags.NoPadding;
-                            Size proposedSize = new Size(int.MaxValue, int.MaxValue);
-                            var sf = System.Windows.Forms.TextRenderer.MeasureText(runText, f, proposedSize, tff); // sf returns size in pixels
-                            var dpi = 96m;
-                            var twip = (int)(((sf.Width / dpi) * 1440m) / multiplier + tabLength * 1440m);
-                            return twip;
-                        }
-                    }
-                    catch (ArgumentException)
-                    {
-                        // if both regular and bold fail, then get metrics for Times New Roman
-                        // use the original FontStyle (in fs)
-                        FontFamily ff2;
-                        ff2 = new FontFamily("Times New Roman");
-                        using (Font f = new Font(ff2, (float)sz / 2f, fs))
-                        {
-                            System.Windows.Forms.TextFormatFlags tff = System.Windows.Forms.TextFormatFlags.NoPadding;
-                            Size proposedSize = new Size(int.MaxValue, int.MaxValue);
-                            var sf = System.Windows.Forms.TextRenderer.MeasureText(runText, f, proposedSize, tff); // sf returns size in pixels
-                            var dpi = 96m;
-                            var twip = (int)(((sf.Width / dpi) * 1440m) / multiplier + tabLength * 1440m);
-                            return twip;
-                        }
-                    }
-                }
-            }
+            var w = MetricsGetter.GetTextWidth(ff, fs, sz, runText);
+
+            return (int) (w / 96m * 1440m / multiplier + tabLength * 1440m);
         }
 
         public static bool GetBoolProp(XElement runProps, XName xName)
@@ -863,6 +784,8 @@ namespace OpenXmlPowerTools
                         {
                             if (ce.Elements(W.del).Any())
                             {
+                                return dontConsolidate;
+#if false
                                 // for w:ins/w:del/w:r/w:delText
                                 if ((ce.Elements(W.del).Elements(W.r).Elements().Count(e => e.Name != W.rPr) != 1) ||
                                     !ce.Elements().Elements().Elements(W.delText).Any())
@@ -891,6 +814,7 @@ namespace OpenXmlPowerTools
                                            .Elements(W.rPr)
                                            .Select(rPr => rPr.ToString(SaveOptions.None))
                                            .StringConcatenate();
+#endif
                             }
 
                             // w:ins/w:r/w:t
@@ -905,9 +829,12 @@ namespace OpenXmlPowerTools
                                 ? ((DateTime) dateIns2).ToString("s")
                                 : string.Empty;
 
+                            string idIns2 = (string)ce.Attribute(W.id);
+
                             return "Wins2" +
                                    authorIns2 +
                                    dateInsString2 +
+                                   idIns2 +
                                    ce.Elements()
                                        .Elements(W.rPr)
                                        .Select(rPr => rPr.ToString(SaveOptions.None))
@@ -972,6 +899,7 @@ namespace OpenXmlPowerTools
 
                     if (g.First().Name == W.ins)
                     {
+#if false
                         if (g.First().Elements(W.del).Any())
                             return new XElement(W.ins,
                                 g.First().Attributes(),
@@ -980,7 +908,7 @@ namespace OpenXmlPowerTools
                                     new XElement(W.r,
                                         g.First().Elements(W.del).Elements(W.r).Elements(W.rPr),
                                         new XElement(W.delText, xs, textValue))));
-
+#endif
                         return new XElement(W.ins,
                             g.First().Attributes(),
                             new XElement(W.r,
@@ -1019,6 +947,207 @@ namespace OpenXmlPowerTools
 
             return runContainerWithConsolidatedRuns;
         }
+
+        private static Dictionary<XName, int> Order_settings = new Dictionary<XName, int>
+        {
+            { W.writeProtection, 10}, 
+            { W.view, 20}, 
+            { W.zoom, 30}, 
+            { W.removePersonalInformation, 40}, 
+            { W.removeDateAndTime, 50}, 
+            { W.doNotDisplayPageBoundaries, 60}, 
+            { W.displayBackgroundShape, 70}, 
+            { W.printPostScriptOverText, 80}, 
+            { W.printFractionalCharacterWidth, 90}, 
+            { W.printFormsData, 100}, 
+            { W.embedTrueTypeFonts, 110}, 
+            { W.embedSystemFonts, 120}, 
+            { W.saveSubsetFonts, 130}, 
+            { W.saveFormsData, 140}, 
+            { W.mirrorMargins, 150}, 
+            { W.alignBordersAndEdges, 160}, 
+            { W.bordersDoNotSurroundHeader, 170}, 
+            { W.bordersDoNotSurroundFooter, 180}, 
+            { W.gutterAtTop, 190}, 
+            { W.hideSpellingErrors, 200}, 
+            { W.hideGrammaticalErrors, 210}, 
+            { W.activeWritingStyle, 220}, 
+            { W.proofState, 230}, 
+            { W.formsDesign, 240}, 
+            { W.attachedTemplate, 250}, 
+            { W.linkStyles, 260}, 
+            { W.stylePaneFormatFilter, 270}, 
+            { W.stylePaneSortMethod, 280}, 
+            { W.documentType, 290}, 
+            { W.mailMerge, 300}, 
+            { W.revisionView, 310}, 
+            { W.trackRevisions, 320}, 
+            { W.doNotTrackMoves, 330}, 
+            { W.doNotTrackFormatting, 340}, 
+            { W.documentProtection, 350}, 
+            { W.autoFormatOverride, 360}, 
+            { W.styleLockTheme, 370}, 
+            { W.styleLockQFSet, 380}, 
+            { W.defaultTabStop, 390}, 
+            { W.autoHyphenation, 400}, 
+            { W.consecutiveHyphenLimit, 410}, 
+            { W.hyphenationZone, 420}, 
+            { W.doNotHyphenateCaps, 430}, 
+            { W.showEnvelope, 440}, 
+            { W.summaryLength, 450}, 
+            { W.clickAndTypeStyle, 460}, 
+            { W.defaultTableStyle, 470}, 
+            { W.evenAndOddHeaders, 480}, 
+            { W.bookFoldRevPrinting, 490}, 
+            { W.bookFoldPrinting, 500}, 
+            { W.bookFoldPrintingSheets, 510}, 
+            { W.drawingGridHorizontalSpacing, 520}, 
+            { W.drawingGridVerticalSpacing, 530}, 
+            { W.displayHorizontalDrawingGridEvery, 540}, 
+            { W.displayVerticalDrawingGridEvery, 550}, 
+            { W.doNotUseMarginsForDrawingGridOrigin, 560}, 
+            { W.drawingGridHorizontalOrigin, 570}, 
+            { W.drawingGridVerticalOrigin, 580}, 
+            { W.doNotShadeFormData, 590}, 
+            { W.noPunctuationKerning, 600}, 
+            { W.characterSpacingControl, 610}, 
+            { W.printTwoOnOne, 620}, 
+            { W.strictFirstAndLastChars, 630}, 
+            { W.noLineBreaksAfter, 640}, 
+            { W.noLineBreaksBefore, 650}, 
+            { W.savePreviewPicture, 660}, 
+            { W.doNotValidateAgainstSchema, 670}, 
+            { W.saveInvalidXml, 680}, 
+            { W.ignoreMixedContent, 690}, 
+            { W.alwaysShowPlaceholderText, 700}, 
+            { W.doNotDemarcateInvalidXml, 710}, 
+            { W.saveXmlDataOnly, 720}, 
+            { W.useXSLTWhenSaving, 730}, 
+            { W.saveThroughXslt, 740}, 
+            { W.showXMLTags, 750}, 
+            { W.alwaysMergeEmptyNamespace, 760}, 
+            { W.updateFields, 770}, 
+            { W.footnotePr, 780}, 
+            { W.endnotePr, 790}, 
+            { W.compat, 800}, 
+            { W.docVars, 810}, 
+            { W.rsids, 820}, 
+            { M.mathPr, 830}, 
+            { W.attachedSchema, 840}, 
+            { W.themeFontLang, 850}, 
+            { W.clrSchemeMapping, 860}, 
+            { W.doNotIncludeSubdocsInStats, 870}, 
+            { W.doNotAutoCompressPictures, 880}, 
+            { W.forceUpgrade, 890}, 
+            //{W.captions, 900}, 
+            { W.readModeInkLockDown, 910}, 
+            { W.smartTagType, 920}, 
+            //{W.sl:schemaLibrary, 930}, 
+            { W.doNotEmbedSmartTags, 940}, 
+            { W.decimalSymbol, 950}, 
+            { W.listSeparator, 960}, 
+        };
+
+#if false
+// from the schema in the standard
+        
+writeProtection
+view
+zoom
+removePersonalInformation
+removeDateAndTime
+doNotDisplayPageBoundaries
+displayBackgroundShape
+printPostScriptOverText
+printFractionalCharacterWidth
+printFormsData
+embedTrueTypeFonts
+embedSystemFonts
+saveSubsetFonts
+saveFormsData
+mirrorMargins
+alignBordersAndEdges
+bordersDoNotSurroundHeader
+bordersDoNotSurroundFooter
+gutterAtTop
+hideSpellingErrors
+hideGrammaticalErrors
+activeWritingStyle
+proofState
+formsDesign
+attachedTemplate
+linkStyles
+stylePaneFormatFilter
+stylePaneSortMethod
+documentType
+mailMerge
+revisionView
+trackRevisions
+doNotTrackMoves
+doNotTrackFormatting
+documentProtection
+autoFormatOverride
+styleLockTheme
+styleLockQFSet
+defaultTabStop
+autoHyphenation
+consecutiveHyphenLimit
+hyphenationZone
+doNotHyphenateCaps
+showEnvelope
+summaryLength
+clickAndTypeStyle
+defaultTableStyle
+evenAndOddHeaders
+bookFoldRevPrinting
+bookFoldPrinting
+bookFoldPrintingSheets
+drawingGridHorizontalSpacing
+drawingGridVerticalSpacing
+displayHorizontalDrawingGridEvery
+displayVerticalDrawingGridEvery
+doNotUseMarginsForDrawingGridOrigin
+drawingGridHorizontalOrigin
+drawingGridVerticalOrigin
+doNotShadeFormData
+noPunctuationKerning
+characterSpacingControl
+printTwoOnOne
+strictFirstAndLastChars
+noLineBreaksAfter
+noLineBreaksBefore
+savePreviewPicture
+doNotValidateAgainstSchema
+saveInvalidXml
+ignoreMixedContent
+alwaysShowPlaceholderText
+doNotDemarcateInvalidXml
+saveXmlDataOnly
+useXSLTWhenSaving
+saveThroughXslt
+showXMLTags
+alwaysMergeEmptyNamespace
+updateFields
+footnotePr
+endnotePr
+compat
+docVars
+rsids
+m:mathPr
+attachedSchema
+themeFontLang
+clrSchemeMapping
+doNotIncludeSubdocsInStats
+doNotAutoCompressPictures
+forceUpgrade
+captions
+readModeInkLockDown
+smartTagType
+sl:schemaLibrary
+doNotEmbedSmartTags
+decimalSymbol
+listSeparator
+#endif
 
         private static Dictionary<XName, int> Order_pPr = new Dictionary<XName, int>
         {
@@ -1275,11 +1404,43 @@ namespace OpenXmlPowerTools
                         element.Elements(W.rPr).Select(e => (XElement)WmlOrderElementsPerStandard(e)),
                         element.Elements().Where(e => e.Name != W.rPr).Select(e => (XElement)WmlOrderElementsPerStandard(e)));
 
+                if (element.Name == W.settings)
+                    return new XElement(element.Name,
+                        element.Attributes(),
+                        element.Elements().Select(e => (XElement)WmlOrderElementsPerStandard(e)).OrderBy(e =>
+                        {
+                            if (Order_settings.ContainsKey(e.Name))
+                                return Order_settings[e.Name];
+                            return 999;
+                        }));
+
                 return new XElement(element.Name,
                     element.Attributes(),
                     element.Nodes().Select(n => WmlOrderElementsPerStandard(n)));
             }
             return node;
+        }
+
+        public static WmlDocument BreakLinkToTemplate(WmlDocument source)
+        {
+            using (MemoryStream ms = new MemoryStream())
+            {
+                ms.Write(source.DocumentByteArray, 0, source.DocumentByteArray.Length);
+                using (WordprocessingDocument wDoc = WordprocessingDocument.Open(ms, true))
+                {
+                    var efpp = wDoc.ExtendedFilePropertiesPart;
+                    if (efpp != null)
+                    {
+                        var xd = efpp.GetXDocument();
+                        var template = xd.Descendants(EP.Template).FirstOrDefault();
+                        if (template != null)
+                            template.Value = "";
+                        efpp.PutXDocument();
+                    }
+                }
+                var result = new WmlDocument(source.FileName, ms.ToArray());
+                return result;
+            }
         }
     }
 
@@ -1623,7 +1784,7 @@ namespace OpenXmlPowerTools
             if (field.Length == 0)
                 return emptyField;
             string fieldType = field.TrimStart().Split(' ').FirstOrDefault();
-            if (fieldType == null || fieldType.ToUpper() != "HYPERLINK")
+            if (fieldType == null || fieldType.ToUpper() != "HYPERLINK" || fieldType.ToUpper() != "REF")
                 return emptyField;
             string[] tokens = GetTokens(field);
             if (tokens.Length == 0)
@@ -5443,6 +5604,32 @@ namespace OpenXmlPowerTools
         public static XNamespace w16se = "http://schemas.microsoft.com/office/word/2015/wordml/symex";
     }
 
+    public static class WE
+    {
+        public static readonly XNamespace we = "http://schemas.microsoft.com/office/webextensions/webextension/2010/11";
+        public static readonly XName alternateReferences = we + "alternateReferences";
+        public static readonly XName binding = we + "binding";
+        public static readonly XName bindings = we + "bindings";
+        public static readonly XName extLst = we + "extLst";
+        public static readonly XName properties = we + "properties";
+        public static readonly XName property = we + "property";
+        public static readonly XName reference = we + "reference";
+        public static readonly XName snapshot = we + "snapshot";
+        public static readonly XName web_extension = we + "web-extension";
+        public static readonly XName webextension = we + "webextension";
+        public static readonly XName webextensionref = we + "webextensionref";
+    }
+
+    public static class WETP
+    {
+        public static readonly XNamespace wetp = "http://schemas.microsoft.com/office/webextensions/taskpanes/2010/11";
+        public static readonly XName extLst = wetp + "extLst";
+        public static readonly XName taskpane = wetp + "taskpane";
+        public static readonly XName taskpanes = wetp + "taskpanes";
+        public static readonly XName web_extension_taskpanes = wetp + "web-extension-taskpanes";
+        public static readonly XName webextensionref = wetp + "webextensionref";
+    }
+
     public static class W3DIGSIG
     {
         public static readonly XNamespace w3digsig =
@@ -5618,11 +5805,14 @@ namespace OpenXmlPowerTools
         public static XNamespace pt = "http://powertools.codeplex.com/2011";
         public static XName Uri = pt + "Uri";
         public static XName Unid = pt + "Unid";
-        public static XName PrevUnid = pt + "PrevUnid";
         public static XName SHA1Hash = pt + "SHA1Hash";
+        public static XName CorrelatedSHA1Hash = pt + "CorrelatedSHA1Hash";
+        public static XName StructureSHA1Hash = pt + "StructureSHA1Hash";
+        public static XName CorrelationSet = pt + "CorrelationSet";
         public static XName Status = pt + "Status";
 
         public static XName Level = pt + "Level";
+        public static XName IndentLevel = pt + "IndentLevel";
         public static XName ContentType = pt + "ContentType";
 
         public static XName trPr = pt + "trPr";

@@ -1,20 +1,5 @@
-﻿/***************************************************************************
-
-Copyright (c) Microsoft Corporation 2012-2015.
-
-This code is licensed using the Microsoft Public License (Ms-PL).  The text of the license can be found here:
-
-http://www.microsoft.com/resources/sharedsource/licensingbasics/publiclicense.mspx
-
-Published at http://OpenXmlDeveloper.org
-Resource Center and Documentation: http://openxmldeveloper.org/wiki/w/wiki/powertools-for-open-xml.aspx
-
-Developer: Eric White
-Blog: http://www.ericwhite.com
-Twitter: @EricWhiteDev
-Email: eric@ericwhite.com
-
-***************************************************************************/
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
 using System.Collections.Generic;
@@ -124,6 +109,42 @@ namespace OxPt
             PresentationBuilder.BuildPresentation(sources, processedDestPptx.FullName);
         }
 
+#if NETCOREAPP2_0
+        [Fact(Skip="Bug in netcore 2.0 : https://github.com/OfficeDev/Open-Xml-PowerTools/pull/238#issuecomment-412375570")]
+#else
+        [Fact]
+#endif
+        public void PB006_VideoFormats()
+        {
+            // This presentation contains videos with content types video/mp4, video/quicktime, video/unknown, video/x-ms-asf, and video/x-msvideo.
+            FileInfo sourcePptx = new FileInfo(Path.Combine(TestUtil.SourceDir.FullName, "PP006-Videos.pptx"));
+
+            var oldMediaDataContentTypes = GetMediaDataContentTypes(sourcePptx);
+
+            List<SlideSource> sources = null;
+            sources = new List<SlideSource>()
+            {
+                new SlideSource(new PmlDocument(sourcePptx.FullName), true),
+            };
+            var processedDestPptx = new FileInfo(Path.Combine(TestUtil.TempDir.FullName, "PB006-Videos.pptx"));
+            PresentationBuilder.BuildPresentation(sources, processedDestPptx.FullName);
+
+            var newMediaDataContentTypes = GetMediaDataContentTypes(processedDestPptx);
+
+            Assert.Equal(oldMediaDataContentTypes, newMediaDataContentTypes);
+        }
+
+        private static string[] GetMediaDataContentTypes(FileInfo fi)
+        {
+            using (PresentationDocument ptDoc = PresentationDocument.Open(fi.FullName, false))
+            {
+                return ptDoc.PresentationPart.SlideParts.SelectMany(
+                        p => p.DataPartReferenceRelationships.Select(d => d.DataPart.ContentType))
+                    .Distinct()
+                    .OrderBy(m => m)
+                    .ToArray();
+            }
+        }
     }
 }
 

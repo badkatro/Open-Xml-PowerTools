@@ -1,23 +1,5 @@
-﻿/***************************************************************************
-
-Copyright (c) Microsoft Corporation 2012-2015.
-
-This code is licensed using the Microsoft Public License (Ms-PL).  The text of the license can be found here:
-
-http://www.microsoft.com/resources/sharedsource/licensingbasics/publiclicense.mspx
-
-Published at http://OpenXmlDeveloper.org
-Resource Center and Documentation: http://openxmldeveloper.org/wiki/w/wiki/powertools-for-open-xml.aspx
-
-Developer: Eric White
-Blog: http://www.ericwhite.com
-Twitter: @EricWhiteDev
-Email: eric@ericwhite.com
-
-Version: 2.6.00
- * Enhancements to support HtmlConverter.cs
-
-***************************************************************************/
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
 using System.Collections;
@@ -59,6 +41,172 @@ namespace OpenXmlPowerTools
             XElement newXElement = XElement.Parse(newElement);
             newXElement.Attributes().Where(a => a.IsNamespaceDeclaration).Remove();
             if (partXDoc.Root != null) partXDoc.Root.Add(newXElement);
+        }
+    }
+
+    public class MhtParser
+    {
+        public string MimeVersion;
+        public string ContentType;
+        public MhtParserPart[] Parts;
+
+        public class MhtParserPart
+        {
+            public string ContentLocation;
+            public string ContentTransferEncoding;
+            public string ContentType;
+            public string CharSet;
+            public string Text;
+            public byte[] Binary;
+        }
+
+        public static MhtParser Parse(string src)
+        {
+            string mimeVersion = null;
+            string contentType = null;
+            string boundary = null;
+
+            string[] lines = src.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+
+
+            var priambleKeyWords = new[]
+            {
+                "MIME-VERSION:",
+                "CONTENT-TYPE:",
+            };
+
+            var priamble = lines.TakeWhile(l =>
+            {
+                var s = l.ToUpper();
+                return priambleKeyWords.Any(pk => s.StartsWith(pk));
+            }).ToArray();
+
+            foreach (var item in priamble)
+            {
+                if (item.ToUpper().StartsWith("MIME-VERSION:"))
+                    mimeVersion = item.Substring("MIME-VERSION:".Length).Trim();
+                else if (item.ToUpper().StartsWith("CONTENT-TYPE:"))
+                {
+                    var contentTypeLine = item.Substring("CONTENT-TYPE:".Length).Trim();
+                    var spl = contentTypeLine.Split(';').Select(z => z.Trim()).ToArray();
+                    foreach (var s in spl)
+                    {
+                        if (s.StartsWith("boundary"))
+                        {
+                            var begText = "boundary=\"";
+                            var begLen = begText.Length;
+                            boundary = s.Substring(begLen, s.Length - begLen - 1).TrimStart('-');
+                            continue;
+                        }
+                        if (contentType == null)
+                        {
+                            contentType = s;
+                            continue;
+                        }
+                        throw new OpenXmlPowerToolsException("Unexpected content in MHTML");
+                    }
+                }
+            }
+
+            var grouped = lines
+                .Skip(priamble.Length)
+                .GroupAdjacent(l =>
+                {
+                    var b = l.TrimStart('-') == boundary;
+                    return b;
+                })
+                .Where(g => g.Key == false)
+                .ToArray();
+
+            var parts = grouped.Select(rp =>
+                {
+                    var partPriambleKeyWords = new[]
+                    {
+                        "CONTENT-LOCATION:",
+                        "CONTENT-TRANSFER-ENCODING:",
+                        "CONTENT-TYPE:",
+                    };
+
+                    var partPriamble = rp.TakeWhile(l =>
+                    {
+                        var s = l.ToUpper();
+                        return partPriambleKeyWords.Any(pk => s.StartsWith(pk));
+                    }).ToArray();
+
+                    string contentLocation = null;
+                    string contentTransferEncoding = null;
+                    string partContentType = null;
+                    string partCharSet = null;
+                    byte[] partBinary = null;
+
+                    foreach (var item in partPriamble)
+                    {
+                        if (item.ToUpper().StartsWith("CONTENT-LOCATION:"))
+                            contentLocation = item.Substring("CONTENT-LOCATION:".Length).Trim();
+                        else if (item.ToUpper().StartsWith("CONTENT-TRANSFER-ENCODING:"))
+                            contentTransferEncoding = item.Substring("CONTENT-TRANSFER-ENCODING:".Length).Trim();
+                        else if (item.ToUpper().StartsWith("CONTENT-TYPE:"))
+                            partContentType = item.Substring("CONTENT-TYPE:".Length).Trim();
+                    }
+
+                    var blankLinesAtBeginning = rp
+                        .Skip(partPriamble.Length)
+                        .TakeWhile(l => l == "")
+                        .Count();
+
+                    var partText = rp
+                        .Skip(partPriamble.Length)
+                        .Skip(blankLinesAtBeginning)
+                        .Select(l => l + Environment.NewLine)
+                        .StringConcatenate();
+
+                    if (partContentType != null && partContentType.Contains(";"))
+                    {
+                        string thisPartContentType = null;
+                        var spl = partContentType.Split(';').Select(s => s.Trim()).ToArray();
+                        foreach (var s in spl)
+                        {
+                            if (s.StartsWith("charset"))
+                            {
+                                var begText = "charset=\"";
+                                var begLen = begText.Length;
+                                partCharSet = s.Substring(begLen, s.Length - begLen - 1);
+                                continue;
+                            }
+                            if (thisPartContentType == null)
+                            {
+                                thisPartContentType = s;
+                                continue;
+                            }
+                            throw new OpenXmlPowerToolsException("Unexpected content in MHTML");
+                        }
+                        partContentType = thisPartContentType;
+                    }
+
+                    if (contentTransferEncoding != null && contentTransferEncoding.ToUpper() == "BASE64")
+                    {
+                        partBinary = Convert.FromBase64String(partText);
+                    }
+
+                    return new MhtParserPart()
+                    {
+                        ContentLocation = contentLocation,
+                        ContentTransferEncoding = contentTransferEncoding,
+                        ContentType = partContentType,
+                        CharSet = partCharSet,
+                        Text = partText,
+                        Binary = partBinary,
+                    };
+                })
+                .Where(p => p.ContentType != null)
+                .ToArray();
+
+            return new MhtParser()
+            {
+                ContentType = contentType,
+                MimeVersion = mimeVersion,
+                Parts = parts,
+            };
         }
     }
 

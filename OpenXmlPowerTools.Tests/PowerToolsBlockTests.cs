@@ -1,14 +1,5 @@
-﻿//
-// Copyright 2017 Thomas Barnekow
-//
-// This code is licensed using the Microsoft Public License (Ms-PL). The text of the
-// license can be found here:
-//
-// http://www.microsoft.com/resources/sharedsource/licensingbasics/publiclicense.mspx
-//
-// Developer: Thomas Barnekow
-// Email: thomas@barnekow.info
-//
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
 using System.Collections.Generic;
@@ -18,6 +9,8 @@ using System.Xml.Linq;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Xunit;
+
+#if !ELIDE_XUNIT_TESTS
 
 namespace OpenXmlPowerTools.Tests
 {
@@ -45,7 +38,7 @@ namespace OpenXmlPowerTools.Tests
                         // Assert that we can see the paragraph added through the strongly typed classes.
                         XDocument content = part.GetXDocument();
                         List<XElement> paragraphElements = content.Descendants(W.p).ToList();
-                        Assert.Equal(1, paragraphElements.Count);
+                        Assert.Single(paragraphElements);
                         Assert.Equal("Added through SDK", paragraphElements[0].Value);
 
                         // Add a paragraph through the PowerTools.
@@ -72,3 +65,5 @@ namespace OpenXmlPowerTools.Tests
         }
     }
 }
+
+#endif
